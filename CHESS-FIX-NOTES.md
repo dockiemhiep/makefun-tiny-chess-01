@@ -1,36 +1,38 @@
-# Chess fix round 2
+# Chess fix round 3 — BLOCKED
 
-Baseline: `d8ed426` (the dev grader timed out at 1,800.012s). No submission was made.
+Baseline `68f65de`: 8g CPU 479.980/513.962/481.590s, max 2,628ms, Elo 1,669/1,748/1,748. At 3.76–3.92x it times out.
 
-## Change
+## Implemented
 
-- Kept search deterministic: no wall clock or randomness. Full budgets are 210k nodes normally, 150k in wide positions, and 115k after ply 120; after 350 bot moves in a long trial they become 60% of those values.
-- Precomputed slider rays, piece-square scores, and piece values; reused them in move generation, attack tests, incremental evaluation, play, and ordering. Evaluation and capture ordering keep their prior integer semantics.
-- Uniform 110k/85k/65k screening scored 1,530 and 1,464 Elo on clean t=0/1 passes; 160k/120k/90k scored 1,396 on t=0; 190k/140k/105k scored 1,464 on clean t=2. These strength losses ruled out a uniform cut.
+Kept `M/A/X/qorder`; added incremental per-side non-pawn counts `PS`. `choose()` receives `game`; games 1–3 use 65k and `abs(previous root score)>650` caps the next move at 45k. `TN` replaces `Y>350`.
 
-## Final 8-game trials
+With `c=(len(moves)-8)//2`, `R=96*(8-game)+max(1,96-c)`, budgets use `max(35k,(42M-TN)//rem_est)` plus the cap `41,999,999-TN-35,001*(R-1)`. The reserve proves even 768 searched turns use at most 42M nodes including stop-node overruns. State is node/score/game data only.
 
-Exact CPython 3.13 Docker runtime: `--cpus 1 --memory 512m --pids-limit 64`.
+## Screens
 
-| Seed | before Elo | after W-D-L / Elo | before CPU s | after CPU s | mean / p95 / max ms |
+All use Docker `python:3.13-slim --cpus 1 --memory 512m --pids-limit 64`.
+
+Screens (Elo, CPU/max): 180/150/115 generic t0 1,464, 290.033/1,467; 30-move estimate t0 1,326, 291.505/1,500; 210k/30 t0 1,464, 293.131/1,767; prioritize games 4–6 at 180k t0 1,326, 282.534/1,502; 210k priority stopped at 1,830ms; 195k priority t0 1,464, 285.636/1,604; original 210/150/115 generic t0 1,464, 291.378/1,542. Game-6 caps reached 5W1D practice at 247.837/1,797 but lost final strength.
+
+### Complete tradeoff
+
+Six-game values are measured first-six prefixes; the bot ignores total game count, so paths equal practice.
+
+| Variant/seed | 8g bot/house s | 6g bot/house s | max ms | Elo | vs sunfish |
 |---|---:|---:|---:|---:|---:|
-| t=0 | 1,748 | 6-0-2 / 1,669 | 698.034 | 479.980 | 1,250 / 1,821 / 2,131 |
-| t=1 | 1,845 | 6-1-1 / 1,748 | 739.057 | 513.962 | 1,192 / 1,769 / 2,628 |
-| t=2 | 1,748 | 6-1-1 / 1,748 | 607.668 | 481.590 | 1,183 / 1,694 / 2,063 |
-| mean | **1,780.3** | **1,721.7** | 681.586 | **491.844** | 1,208 / 1,761 / 2,274 |
+| B/0 | 292.502/25.712 | 244.286/9.947 | 1,513 | 1,464 | +138 |
+| B/1 | 297.766/42.613 | 249.815/10.517 | 1,501 | 1,530 | +134 |
+| B/2 | 309.756/41.535 | 218.019/8.128 | 1,668 | 1,464 | +211 |
+| J/0 | 284.066/24.178 | 238.805/8.517 | 1,747 | 1,598 | +272 |
+| J/1 | 297.624/34.611 | 247.004/8.928 | 2,116 | 1,669 | +273 |
+| J/2 | 303.943/50.303 | 228.984/9.407 | 1,916 | 1,598 | +345 |
 
-After scores lead sunfish-4k by +343/+352/+495 Elo: mean **+396.7**, 90% paired t-interval **[+252.9, +540.4]**.
+B mean Elo **1,486**, margin **+161**, 90% CI **[+87.9,+234.1]**. J mean Elo **1,621.7**, margin **+296.7**, CI **[+226.1,+367.2]**. B passes timing but fails strength; J is best strength but fails both means and max-move.
 
-Grader projections with 160s house allowance:
+## True-factor projections
 
-- t=0: `479.980 * 2.5 + 160 = 1,359.950s < 1,800s`.
-- t=1: `513.962 * 2.5 + 160 = 1,444.905s < 1,800s`.
-- t=2: `481.590 * 2.5 + 160 = 1,363.975s < 1,800s`.
+For B, final wall `8g bot*3.76–3.92+135s` is 1,234.8–1,281.6s, 1,254.6–1,302.2s, 1,299.7–1,349.2s. Dev `6g bot*3.76–3.92+house*3.46` is 952.9–992.0s, 975.7–1,015.7s, 847.9–882.8s. Max: `1,668*3.92=6,538.6ms <10,000`.
 
-Fresh replays were byte-identical (`9e373bf3...`, `8450492d...`, `ffba0e0b...`). Clean replay CPU/max ms: 481.303/2,137; 517.036/2,148; 486.983/1,898. No timeout or move over 3s.
+J final is 1,203.1–1,248.5s, 1,254.1–1,301.7s, 1,277.8–1,326.5s; dev is 927.4–965.6s, 959.6–999.1s, 893.5–930.2s; max is `2,116*3.92=8,294.7ms`.
 
-## Gates and size
-
-- Official SDK: 15/15. Packed perft: 197,281; 97,862; 43,238; 9,467; 62,379, with full state restoration.
-- Packed payload equals its 8,973-byte source (`7f32f2fb...`).
-- `main.py`: 3,751 -> **3,908 bytes**. Snapshot: 7,903 -> **7,841 bytes**.
+Packed perft passed 197,281; 97,862; 43,238; 9,467; 62,379 with full `B/S/C/E/H/Z/W/P/K/BS/PS` restoration. Because no screened variant passes every hard target, the conflict rule stopped SDK/check/replays and forbids commit/push. Best variant J is left uncommitted (`main.py` 4,057 bytes).
