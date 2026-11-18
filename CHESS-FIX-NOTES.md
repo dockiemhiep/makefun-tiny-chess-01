@@ -1,40 +1,36 @@
-# Chess fix round
+# Chess fix round 2
 
-Baseline: `6cbad16`, `main.py` 3,366 bytes. No submission was made.
+Baseline: `d8ed426` (the dev grader timed out at 1,800.012s). No submission was made.
 
-## Changes
+## Change
 
-- **P0 trial wall:** use 64-square iteration, incremental evaluation caches, and deterministic 220k/160k/125k node budgets (wide/late positions get less). Every clean 8-game M4 trial is now below 800 bot-CPU seconds without using a clock.
-- **P1 LMR:** a quiet move is reduced only when the mover was not in check and the move does not give check. The reported position now chooses `d1e1+`, not `e3e2`.
-- **P1 repetition:** rebuild two-sided history from `start_fen` plus every game move before the forced-move path. Root detection is live; the regression cycle avoids repeating with `f6g8`.
-- **P1 dead positions:** recognize the server's exact insufficient-material cases. A corrected capturable-rook repro chooses `d7e7`, not drawing `d7d8`. (The debate's first FEN did not permit `Kxd8`.)
-- **Cheap P2s:** check mate before the 100-halfmove draw (`c2c8#`), disable consecutive null moves, and add king-shield/mop-up evaluation. Optional TT normalization was left unchanged.
+- Kept search deterministic: no wall clock or randomness. Full budgets are 210k nodes normally, 150k in wide positions, and 115k after ply 120; after 350 bot moves in a long trial they become 60% of those values.
+- Precomputed slider rays, piece-square scores, and piece values; reused them in move generation, attack tests, incremental evaluation, play, and ordering. Evaluation and capture ordering keep their prior integer semantics.
+- Uniform 110k/85k/65k screening scored 1,530 and 1,464 Elo on clean t=0/1 passes; 160k/120k/90k scored 1,396 on t=0; 190k/140k/105k scored 1,464 on clean t=2. These strength losses ruled out a uniform cut.
 
-## Strength
+## Final 8-game trials
 
-| Seed | Before W-D-L / Elo | After W-D-L / Elo |
-|---|---:|---:|
-| t=0 | 6-1-1 / 1,748 | 6-1-1 / 1,748 |
-| t=1 | 6-1-1 / 1,748 | 7-0-1 / 1,845 |
-| t=2 | 5-0-3 / 1,530 | 6-1-1 / 1,748 |
-| mean | 1,675.3 | **1,780.3** |
+Exact CPython 3.13 Docker runtime: `--cpus 1 --memory 512m --pids-limit 64`.
 
-The after scores lead sunfish-4k by +422/+449/+495 Elo: mean **+455.3**, 90% paired t-interval **[+393.1, +517.6]**.
-
-## Timing
-
-Clean full 8-game CPython 3.13 M4 passes:
-
-| Seed | moves | bot CPU s | mean ms | p95 ms | max ms |
+| Seed | before Elo | after W-D-L / Elo | before CPU s | after CPU s | mean / p95 / max ms |
 |---|---:|---:|---:|---:|---:|
-| t=0 | 402 | 698.034 | 1,736 | 2,669 | 3,042 |
-| t=1 | 404 | 739.057 | 1,829 | 2,565 | 2,968 |
-| t=2 | 383 | 607.668 | 1,587 | 2,193 | 2,432 |
+| t=0 | 1,748 | 6-0-2 / 1,669 | 698.034 | 479.980 | 1,250 / 1,821 / 2,131 |
+| t=1 | 1,845 | 6-1-1 / 1,748 | 739.057 | 513.962 | 1,192 / 1,769 / 2,628 |
+| t=2 | 1,748 | 6-1-1 / 1,748 | 607.668 | 481.590 | 1,183 / 1,694 / 2,063 |
+| mean | **1,780.3** | **1,721.7** | 681.586 | **491.844** | 1,208 / 1,761 / 2,274 |
 
-Before: full t=0 used 1,148.2 bot-CPU seconds; t=2 used 912.5s with a 3,899ms max; custom eight used 1,222.5s. No full t=1 timing survived (six games: 549s). After: no timeout or move over 10s. Fresh replays produced byte-identical state on all seeds (`39c3e0...`, `aa0e56...`, `4fc1ec...`).
+After scores lead sunfish-4k by +343/+352/+495 Elo: mean **+396.7**, 90% paired t-interval **[+252.9, +540.4]**.
+
+Grader projections with 160s house allowance:
+
+- t=0: `479.980 * 2.5 + 160 = 1,359.950s < 1,800s`.
+- t=1: `513.962 * 2.5 + 160 = 1,444.905s < 1,800s`.
+- t=2: `481.590 * 2.5 + 160 = 1,363.975s < 1,800s`.
+
+Fresh replays were byte-identical (`9e373bf3...`, `8450492d...`, `ffba0e0b...`). Clean replay CPU/max ms: 481.303/2,137; 517.036/2,148; 486.983/1,898. No timeout or move over 3s.
 
 ## Gates and size
 
 - Official SDK: 15/15. Packed perft: 197,281; 97,862; 43,238; 9,467; 62,379, with full state restoration.
-- Packed payload equals its 8,521-byte source (`dca901b8...`).
-- `main.py`: **3,366 -> 3,751 bytes**. Repository snapshot: **6,898 -> 7,903 bytes**.
+- Packed payload equals its 8,973-byte source (`7f32f2fb...`).
+- `main.py`: 3,751 -> **3,908 bytes**. Snapshot: 7,903 -> **7,841 bytes**.
